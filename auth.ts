@@ -1,10 +1,10 @@
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { compare } from "bcryptjs";
+import {PrismaAdapter} from "@auth/prisma-adapter";
+import {compare} from "bcryptjs";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { getServerSession, type NextAuthOptions } from "next-auth";
+import {getServerSession, type NextAuthOptions} from "next-auth";
 
-import { prisma } from "@/lib/db";
+import {prisma} from "@/lib/db";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -18,8 +18,8 @@ export const authOptions: NextAuthOptions = {
     Credentials({
       name: "Email and password",
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
+        email: {label: "Email", type: "email"},
+        password: {label: "Password", type: "password"},
       },
       async authorize(credentials) {
         const email = credentials?.email;
@@ -30,7 +30,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: email.toLowerCase() },
+          where: {email: email.toLowerCase()},
         });
 
         if (!user) {
@@ -52,15 +52,24 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({token, user}) {
       if (user?.id) {
         token.id = user.id;
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({session, token}) {
       if (session.user && typeof token.id === "string") {
-        session.user.id = token.id;
+        const userExists = await prisma.user.findUnique({
+          where: {id: token.id},
+          select: {id: true},
+        });
+        if (userExists) {
+          session.user.id = token.id;
+        } else {
+          // If database was reset/migrated and user no longer exists, invalidate the session's id
+          session.user.id = "";
+        }
       }
       return session;
     },

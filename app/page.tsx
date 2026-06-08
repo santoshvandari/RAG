@@ -10,16 +10,21 @@ export default async function Home() {
         <p className="text-xs uppercase tracking-wide text-zinc-500">Modular foundation ready</p>
         <h1 className="mt-2 text-3xl font-semibold text-zinc-900">Personalized RAG Starter</h1>
         <p className="mt-4 text-zinc-700">
-          Prisma, AI provider abstraction, and local auth are configured. Next step is wiring
-          Chroma and Mem0 loops against your session user id.
+          Prisma, AI provider abstraction, local auth, and a dynamically hydrated local MemoryVectorStore are fully wired against your session user ID.
         </p>
 
         <div className="mt-8 flex flex-wrap gap-3">
           {session?.user?.id ? (
             <>
               <Link
-                href="/dashboard"
+                href="/chat"
                 className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+              >
+                Go to Chat
+              </Link>
+              <Link
+                href="/dashboard"
+                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
               >
                 Open dashboard
               </Link>

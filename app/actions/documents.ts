@@ -1,14 +1,17 @@
 "use server";
 
-import { randomUUID } from "crypto";
+import {randomUUID} from "crypto";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import {revalidatePath} from "next/cache";
+import {redirect} from "next/navigation";
 
-import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
-import { aiProviders } from "@/lib/ai-provider";
-import { extractTextFromUpload, splitDocumentText } from "@/lib/document-ingestion";
+import {auth} from "@/auth";
+import {prisma} from "@/lib/db";
+import {aiProviders} from "@/lib/llm";
+import {
+  extractTextFromUpload,
+  splitDocumentText,
+} from "@/lib/document-ingestion";
 
 export type DocumentUploadState = {
   error?: string;
@@ -30,62 +33,38 @@ export async function uploadDocumentAction(
   const fileEntry = formData.get("file");
 
   if (!(fileEntry instanceof File)) {
-    return { error: "Choose a file to upload." };
+    return {error: "Choose a file to upload."};
   }
 
   if (!fileEntry.size) {
-    return { error: "The uploaded file is empty." };
+    return {error: "The uploaded file is empty."};
   }
 
   if (fileEntry.size > MAX_UPLOAD_SIZE_BYTES) {
-    return { error: "Files must be 15 MB or smaller." };
+    return {error: "Files must be 15 MB or smaller."};
   }
 
   const fileName = fileEntry.name.trim();
 
   if (!fileName) {
-    return { error: "The uploaded file must have a name." };
+    return {error: "The uploaded file must have a name."};
   }
 
   const text = await extractTextFromUpload(fileEntry);
 
   if (!text) {
-    return { error: "We could not extract any text from that file." };
+    return {error: "We could not extract any text from that file."};
   }
 
   const chunks = await splitDocumentText(text);
 
   if (!chunks.length) {
-    return { error: "No embeddable chunks were found in the file." };
+    return {error: "No embeddable chunks were found in the file."};
   }
 
   const vectors = await aiProviders.embeddings.embedDocuments(chunks);
   const documentId = randomUUID();
   const storageKey = `${session.user.id}:${documentId}`;
-
-  // ── ChromaDB upsert ──────────────────────────────────────────────────────
-  // Dynamic import keeps chromadb out of the initial bundle; wrapped in
-  // try/catch so uploads succeed even when ChromaDB is not yet running.
-  try {
-    const { getUserDocumentsCollection } = await import("@/lib/chroma-client");
-    const collection = await getUserDocumentsCollection();
-
-    await collection.upsert({
-      ids: chunks.map((_, i) => `${documentId}:${i}`),
-      embeddings: vectors,
-      documents: chunks,
-      metadatas: chunks.map((_, chunkIndex) => ({
-        userId: session.user.id,
-        documentId,
-        chunkIndex,
-        fileName,
-      })),
-    });
-  } catch (chromaError) {
-    // ChromaDB is optional at this stage — log and continue.
-    console.error("[chroma] upsert failed:", chromaError);
-  }
-  // ────────────────────────────────────────────────────────────────────────
 
   await prisma.$transaction(async (transaction) => {
     const document = await transaction.document.create({

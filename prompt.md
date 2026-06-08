@@ -1,71 +1,46 @@
-## 🤖 AI Agent Task: Implemeting Gemini + Local Mem0 Personalized Chat
+# TASK HANDOFF: RAG SYSTEM IMPLEMENTATION (NEXT.JS + LANGCHAIN)
 
-**Objective:**
-Analyze the existing chat system or API routes and upgrade them to a personalized, streaming RAG system using **Google Gemini**, **ChromaDB**, and **Local Mem0**.
+## 🎯 Context & Goal
 
-**Technical Specs for Chat:**
+We are building a local Retrieval-Augmented Generation (RAG) system using Next.js (App Router) and LangChain. The user authentication flow is structured as: Register ➔ Log In ➔ Dashboard (with 2 functional options: Upload PDF and Chat).
 
-- **LLM:** Google Gemini (Default: `gemini-1.5-flash` or `gemini-1.5-pro` via LangChain)
-- **Vector DB:** ChromaDB (Filtered by the logged-in user's ID)
-- **Memory Layer:** Local Mem0 SDK
+The ingestion pipeline has been optimized to decouple file processing from live querying. PDFs are uploaded once, parsed into chunks, and saved structurally in Prisma to avoid repetitive, expensive parsing overhead.
 
-**Your Task Instructions:**
+## 🛠️ Verified Tech Stack
 
-### 1. Install/Verify Dependencies
+- **Framework:** Next.js (TypeScript)
+- **Database/ORM:** Prisma
+- **Vector Storage Strategy:** Local runtime hydration using `MemoryVectorStore` (`@langchain/core/vectorstores/memory`) populated dynamically from pre-chunked Prisma data.
+- **LLM Engine:** Google GenAI (`gemini-2.0-flash`)
+- **Embedding Engine:** Google GenAI (`gemini-embedding-2`)
+- **Document Loading:** `@langchain/community/document_loaders/fs/pdf`
 
-Ensure the Google Gen AI packages are available:
+## 📊 Completed Structural Components
 
-```bash
-npm install @langchain/google-genai mem0ai
+### 1. Prisma Data Layer (`prisma/schema.prisma`)
 
+```prisma
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  documents Document[]
+  createdAt DateTime   @default(now())
+}
+
+model Document {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks    Chunk[]
+  createdAt DateTime @default(now())
+}
+
+model Chunk {
+  id         String   @id @default(cuid())
+  content    String   @db.Text
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
 ```
-
-### 2. Update the Configurable AI Provider
-
-Add the Gemini Chat model to your configuration layer (`lib/ai-provider.ts` or equivalent):
-
-- Use `ChatGoogleGenerationAI` from `@langchain/google-genai`.
-- Make the model name configurable via an environment variable (e.g., `GEMINI_CHAT_MODEL`).
-
-### 3. Implement the "Retrieval + Memory" Chat Route (`app/api/chat/route.ts`)
-
-Refactor or create the streaming chat endpoint. The backend logic must strictly follow these sequential steps for every incoming user query:
-
-1. **Identity Check:** Extract the `session.user.id` using your NextAuth configuration.
-2. **ChromaDB Retrieval:**
-
-- Query the `user_documents` collection using the user's question.
-- **Crucial:** Apply a metadata filter `{ userId: session.user.id }` so users can _never_ retrieve documents belonging to anyone else.
-
-3. **Local Mem0 Recall:**
-
-- Call `mem0.search(query, { user_id: session.user.id })` to extract the user's long-term profile, context, and past style preferences.
-
-4. **Prompt Assembly:**
-
-- Construct a System Prompt instructing Gemini to answer the question using the retrieved document context, while adapting its tone/format based on the user's Mem0 preferences.
-
-5. **Stream with Gemini:** Stream the response back to the frontend UI in real-time.
-6. **Mem0 Update (Background):**
-
-- After the stream completes, asynchronously pass the latest interaction to `mem0.add()` so the local memory continuously learns new facts about the user.
-
-### 4. Frontend UI Enhancements
-
-- Verify the chat UI supports streaming text rendering.
-- Add a subtle "Memory Context" panel in the sidebar showing what Mem0 has currently stored about the user's profile.
-
-**Updated Environment Variables Template:**
-
-```env
-# Gemini Setup
-GOOGLE_API_KEY=your-google-api-key
-GEMINI_CHAT_MODEL=gemini-1.5-flash
-
-# Chroma & Mem0
-CHROMA_URL=http://localhost:8000
-MEM0_DIR="./.mem0"
-
-```
-
----
